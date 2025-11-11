@@ -1,0 +1,288 @@
+# Implementation Plan
+
+- [ ] 1. Set up backend project structure and core configuration
+  - Initialize Node.js project with Express
+  - Create directory structure for routes, controllers, services, repositories, models, middleware, validators, utils, config, and docs
+  - Set up environment configuration with .env file for database credentials, JWT secret, port, and node environment
+  - Configure PostgreSQL database connection with connection pooling
+  - Set up Winston logger with different log levels and file transports
+  - Create .env.example template file
+  - _Requirements: 12.1, 12.5_
+
+- [ ] 2. Implement database schema and models
+  - Create PostgreSQL migration script for users table with id, email, password, role, created_at, and updated_at columns
+  - Create PostgreSQL migration script for tasks table with id, title, description, status, user_id, created_at, and updated_at columns
+  - Add indexes on users.email, tasks.user_id, and tasks.created_at
+  - Create User model with field definitions and validation rules
+  - Create Task model with field definitions and validation rules
+  - _Requirements: 1.1, 5.1, 12.1_
+
+- [ ] 3. Build authentication service and JWT functionality
+  - [ ] 3.1 Implement JWT service for token generation and verification
+    - Create generateToken function that accepts user object and returns signed JWT with userId, email, role, and 24-hour expiration
+    - Create verifyToken function that validates JWT signature and returns decoded payload
+    - Use environment variable for JWT secret key
+    - _Requirements: 2.3, 2.4, 3.4_
+  - [ ] 3.2 Implement password hashing utilities
+    - Create hashPassword function using bcrypt with 10 salt rounds
+    - Create comparePassword function to verify password against hash
+    - _Requirements: 1.1, 2.5_
+  - [ ] 3.3 Create input sanitization utility
+    - Implement sanitizeInput function to trim whitespace, escape HTML characters, and remove SQL injection patterns
+    - _Requirements: 1.5, 5.5_
+  - [ ] 3.4 Implement User repository for database operations
+    - Create createUser function to insert new user record
+    - Create findByEmail function to query user by email
+    - Create findById function to query user by ID
+    - Use parameterized queries to prevent SQL injection
+    - _Requirements: 1.1, 2.1_
+  - [ ] 3.5 Implement Auth service with business logic
+    - Create registerUser function that validates password requirements (8+ chars, uppercase, lowercase, number), checks for existing email, hashes password, and calls user repository
+    - Create authenticateUser function that finds user by email, compares password hash, and generates JWT token
+    - Return appropriate error messages for validation failures
+    - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2_
+  - [ ] 3.6 Write unit tests for auth service
+    - Test password validation logic
+    - Test duplicate email handling
+    - Test password hashing and comparison
+    - Test JWT token generation and verification
+    - _Requirements: 1.1, 1.2, 2.1, 2.2_
+
+- [ ] 4. Create authentication middleware and validators
+  - [ ] 4.1 Implement authentication middleware
+    - Extract JWT token from Authorization header (Bearer format)
+    - Verify token using JWT service
+    - Attach decoded user information to req.user
+    - Return 401 Unauthorized for missing or invalid tokens
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+  - [ ] 4.2 Implement role-based authorization middleware
+    - Create requireRole middleware that accepts array of allowed roles
+    - Check if req.user.role is in allowed roles array
+    - Return 403 Forbidden if user lacks required role
+    - _Requirements: 4.1, 4.2, 4.3_
+  - [ ] 4.3 Create validation middleware using Joi
+    - Implement validate middleware that accepts Joi schema
+    - Validate req.body against schema
+    - Return 400 Bad Request with field-specific errors for validation failures
+    - _Requirements: 1.3, 5.2, 11.3_
+  - [ ] 4.4 Create Joi validation schemas
+    - Create registerSchema for email (valid email format) and password (min 8 chars, uppercase, lowercase, number)
+    - Create loginSchema for email and password (required fields)
+    - Create taskSchema for title (required, max 255 chars) and description (required)
+    - Create updateTaskSchema for optional title, description, and status (enum: pending, in_progress, completed)
+    - _Requirements: 1.3, 5.2_
+
+- [ ] 5. Build authentication routes and controllers
+  - [ ] 5.1 Implement Auth controller
+    - Create register controller that calls auth service, handles errors, and returns 201 Created with user data (excluding password)
+    - Create login controller that calls auth service, handles errors, and returns 200 OK with JWT token and user data
+    - Use consistent error response format with success flag, error code, and message
+    - _Requirements: 1.1, 1.2, 2.1, 2.2, 11.1_
+  - [ ] 5.2 Create authentication routes
+    - Define POST /api/v1/auth/register route with validation middleware
+    - Define POST /api/v1/auth/login route with validation middleware
+    - Apply input sanitization to all routes
+    - _Requirements: 1.1, 2.1, 12.1_
+  - [ ] 5.3 Write integration tests for auth endpoints
+    - Test successful user registration
+    - Test duplicate email registration (409 Conflict)
+    - Test invalid password registration (400 Bad Request)
+    - Test successful login with valid credentials
+    - Test login with invalid credentials (401 Unauthorized)
+    - _Requirements: 1.1, 1.2, 2.1, 2.2_
+
+- [ ] 6. Implement task management service and repository
+  - [ ] 6.1 Create Task repository for database operations
+    - Create createTask function to insert task with user_id
+    - Create findByUserId function to query tasks by user with pagination and ordering by created_at DESC
+    - Create findById function to query single task
+    - Create updateTask function to update task fields
+    - Create deleteTask function to remove task
+    - Create findAll function for admin to query all tasks with pagination
+    - Use parameterized queries for all operations
+    - _Requirements: 5.1, 6.1, 7.1, 8.1_
+  - [ ] 6.2 Implement Task service with business logic
+    - Create createTask function that sanitizes input, validates required fields, and calls repository with userId
+    - Create getUserTasks function that fetches tasks for specific user with pagination support
+    - Create getTaskById function that retrieves single task and verifies ownership
+    - Create updateTask function that verifies ownership (or admin role) before updating
+    - Create deleteTask function that verifies ownership (or admin role) before deleting
+    - Create getAllTasks function for admin to retrieve all tasks
+    - Return appropriate errors for not found (404) and forbidden (403) cases
+    - _Requirements: 5.1, 5.2, 6.1, 7.1, 7.2, 8.1, 8.2_
+  - [ ] 6.3 Write unit tests for task service
+    - Test task creation with valid data
+    - Test task ownership verification
+    - Test admin access to all tasks
+    - Test pagination logic
+    - _Requirements: 5.1, 6.1, 7.1, 8.1_
+
+- [ ] 7. Build task routes and controllers
+  - [ ] 7.1 Implement Task controller
+    - Create createTask controller that calls service and returns 201 Created
+    - Create getTasks controller that calls service with pagination params and returns 200 OK
+    - Create getTaskById controller that calls service and returns 200 OK or 404 Not Found
+    - Create updateTask controller that calls service and returns 200 OK, 403 Forbidden, or 404 Not Found
+    - Create deleteTask controller that calls service and returns 204 No Content, 403 Forbidden, or 404 Not Found
+    - Create getAllTasks controller for admin that returns all tasks with 200 OK
+    - Use consistent error response format
+    - _Requirements: 5.3, 6.3, 7.3, 7.4, 8.3, 8.4, 11.1_
+  - [ ] 7.2 Create task routes with authentication and authorization
+    - Define POST /api/v1/tasks route with auth middleware and validation
+    - Define GET /api/v1/tasks route with auth middleware and pagination query params
+    - Define GET /api/v1/tasks/:id route with auth middleware
+    - Define PUT /api/v1/tasks/:id route with auth middleware and validation
+    - Define DELETE /api/v1/tasks/:id route with auth middleware
+    - Define GET /api/v1/tasks/all route with auth middleware and admin role requirement
+    - Apply input sanitization to all routes
+    - _Requirements: 5.1, 6.1, 7.1, 8.1, 4.1, 4.4, 12.1_
+  - [ ] 7.3 Write integration tests for task endpoints
+    - Test task creation with valid token
+    - Test task creation without token (401)
+    - Test getting user tasks with pagination
+    - Test updating own task
+    - Test updating another user's task (403)
+    - Test deleting own task
+    - Test admin accessing all tasks
+    - Test user accessing admin endpoint (403)
+    - _Requirements: 5.1, 6.1, 7.1, 7.2, 8.1, 8.2, 4.1, 4.2_
+
+- [ ] 8. Implement global error handling and logging
+  - Create error handler middleware that logs errors with Winston, determines status code, formats error response, and never exposes stack traces in production
+  - Add request logging middleware that logs method, path, status code, and response time for all requests
+  - Configure Winston with separate transports for error and combined logs
+  - Apply error handler as final middleware in Express app
+  - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5_
+
+- [ ] 9. Create API documentation with Swagger
+  - [ ] 9.1 Set up Swagger/OpenAPI configuration
+    - Install swagger-ui-express and swagger-jsdoc packages
+    - Create swagger.js configuration file with API info, servers, and security schemes
+    - Define bearerAuth security scheme for JWT
+    - Mount Swagger UI at /api-docs endpoint
+    - _Requirements: 10.1, 10.5_
+  - [ ] 9.2 Document authentication endpoints
+    - Add OpenAPI annotations for POST /api/v1/auth/register with request body schema, response schemas, and status codes (201, 400, 409)
+    - Add OpenAPI annotations for POST /api/v1/auth/login with request body schema, response schemas, and status codes (200, 401)
+    - Include example requests and responses
+    - _Requirements: 10.2, 10.3, 10.4_
+  - [ ] 9.3 Document task endpoints
+    - Add OpenAPI annotations for all task endpoints (POST, GET, PUT, DELETE) with request schemas, response schemas, authentication requirements, and status codes
+    - Document pagination query parameters for GET /api/v1/tasks
+    - Document admin-only endpoint GET /api/v1/tasks/all
+    - Include example requests and responses for each endpoint
+    - _Requirements: 10.2, 10.3, 10.4_
+
+- [ ] 10. Set up frontend project structure
+  - Initialize React project with Create React App or Vite
+  - Install dependencies: react-router-dom, axios
+  - Create directory structure for components (Auth, Dashboard, Tasks, Common), context, services, and utils
+  - Set up React Router with routes for login, register, and dashboard
+  - Configure proxy or environment variable for backend API URL
+  - _Requirements: 9.1, 12.1_
+
+- [ ] 11. Implement frontend authentication context and token management
+  - [ ] 11.1 Create token storage utility
+    - Implement saveToken function to store JWT in localStorage
+    - Implement getToken function to retrieve JWT from localStorage
+    - Implement removeToken function to clear JWT from localStorage
+    - Implement isTokenValid function to check token expiration
+    - _Requirements: 9.3_
+  - [ ] 11.2 Create AuthContext for global state management
+    - Create context with user state and authentication functions
+    - Implement login function that calls auth service, stores token, and updates user state
+    - Implement register function that calls auth service
+    - Implement logout function that removes token and clears user state
+    - Load user from token on app initialization
+    - _Requirements: 9.3_
+  - [ ] 11.3 Create API service with Axios interceptors
+    - Create Axios instance with base URL from environment variable
+    - Add request interceptor to attach JWT token from localStorage to Authorization header
+    - Add response interceptor to handle 401 errors by logging out user
+    - _Requirements: 9.3_
+
+- [ ] 12. Build frontend authentication components
+  - [ ] 12.1 Create Register component
+    - Build form with email and password inputs
+    - Implement client-side validation for email format and password requirements
+    - Call register function from AuthContext on form submit
+    - Display success message and redirect to login on successful registration
+    - Display error messages from API responses
+    - _Requirements: 9.1, 9.2, 9.5_
+  - [ ] 12.2 Create Login component
+    - Build form with email and password inputs
+    - Call login function from AuthContext on form submit
+    - Redirect to dashboard on successful login
+    - Display error messages from API responses
+    - _Requirements: 9.2, 9.3, 9.5_
+  - [ ] 12.3 Create ProtectedRoute component
+    - Check for valid token in AuthContext
+    - Redirect to login page if token is missing or invalid
+    - Render protected component if authenticated
+    - _Requirements: 9.4_
+
+- [ ] 13. Implement frontend task management components
+  - [ ] 13.1 Create task API service functions
+    - Implement getTasks function with pagination parameters
+    - Implement getTaskById function
+    - Implement createTask function
+    - Implement updateTask function
+    - Implement deleteTask function
+    - All functions use Axios instance with automatic token attachment
+    - _Requirements: 9.2_
+  - [ ] 13.2 Create TaskForm component
+    - Build form with title, description, and status inputs
+    - Implement form validation
+    - Call createTask or updateTask service function on submit
+    - Display success or error messages
+    - Reset form after successful creation
+    - _Requirements: 9.2, 9.5_
+  - [ ] 13.3 Create TaskItem component
+    - Display task title, description, status, and timestamps
+    - Add edit button that enables inline editing or opens TaskForm
+    - Add delete button with confirmation
+    - Call updateTask or deleteTask service functions
+    - Display error messages from API responses
+    - _Requirements: 9.2, 9.5_
+  - [ ] 13.4 Create TaskList component
+    - Fetch tasks using getTasks service function on component mount
+    - Display loading state while fetching
+    - Render TaskForm for creating new tasks
+    - Map tasks array to TaskItem components
+    - Implement pagination controls with page navigation
+    - Display error messages from API responses
+    - _Requirements: 9.2, 9.5_
+  - [ ] 13.5 Create Dashboard component
+    - Display user information from AuthContext
+    - Render TaskList component
+    - Add logout button that calls logout function from AuthContext
+    - _Requirements: 9.2_
+
+- [ ] 14. Wire up frontend routing and integrate all components
+  - Configure React Router with routes: / (redirect to login), /login, /register, /dashboard (protected)
+  - Wrap dashboard route with ProtectedRoute component
+  - Wrap entire app with AuthContext provider
+  - Add navigation links between login and register pages
+  - Test complete user flow: register → login → dashboard → create task → edit task → delete task → logout
+  - _Requirements: 9.1, 9.2, 9.3, 9.4_
+
+- [ ] 15. Create comprehensive README documentation
+  - Write project overview and features list
+  - Document technology stack for backend and frontend
+  - Provide setup instructions: clone repo, install dependencies, configure environment variables, run database migrations, start backend server, start frontend dev server
+  - Document API endpoints with methods, paths, authentication requirements, and example requests/responses
+  - Include database schema diagrams or descriptions
+  - Document security practices: password hashing, JWT implementation, input sanitization
+  - Add scalability notes: stateless design, horizontal scaling, connection pooling, caching strategy, Docker deployment, microservices architecture
+  - Provide testing instructions for running backend and frontend tests
+  - Include troubleshooting section for common issues
+  - _Requirements: 10.1, 12.1, 12.2, 12.3, 12.4_
+
+- [ ] 16. Set up Docker deployment configuration
+  - Create Dockerfile for backend with Node.js base image, dependency installation, and start command
+  - Create Dockerfile for frontend with Node.js build stage and nginx serve stage
+  - Create docker-compose.yml with services for backend, frontend, and PostgreSQL database
+  - Configure environment variables in docker-compose
+  - Add volume mounts for database persistence
+  - Document Docker setup and usage in README
+  - _Requirements: 12.2, 12.3_
